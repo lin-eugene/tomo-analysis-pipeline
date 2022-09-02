@@ -1,0 +1,1 @@
+pythonw mainView.py "filename"

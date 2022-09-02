@@ -1,0 +1,6 @@
+data/
+raw/
+pickle/
+save/
+*.pdf
+*.png

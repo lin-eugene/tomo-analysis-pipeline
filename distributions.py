@@ -165,7 +165,14 @@ class ImageProcessing():
 
 class GenerateDistributions():
     def __init__(self, img, peaklist, r, dtheta, 
-        pl_intensities, pl_lines, pseudoradav, pl_pseudoradav, radav, pl_radav, compare, clust_av):
+        pl_intensities=False, 
+        pl_lines=False, 
+        pseudoradav=False, 
+        pl_pseudoradav=False,
+        radav=True,
+        pl_radav=False, 
+        compare=False, 
+        clust_av=False):
         """
         Class to plot out spatial distribution information from image
         
@@ -214,6 +221,7 @@ class GenerateDistributions():
             
         if(radav):
             self.radial_average()
+            self.radial_average_norm()
             if(pl_radav):
                 self.plotradav()
         
@@ -225,9 +233,7 @@ class GenerateDistributions():
 
         if(clust_av):
             self.cluster_averaging()
-        
-        self.radial_average_norm()
-        self.cluster_averaging_norm()
+            self.cluster_averaging_norm()
 
     def filter_peaks(self):
         """
@@ -515,7 +521,7 @@ class GenerateDistributions():
         plt.figure()
         plt.plot(self.dropletmean)
         plt.fill_between(self.x_radav,self.dropletmean - self.dropletstd, self.dropletmean+self.dropletstd, alpha=0.2)
-        plt.ylim([0,np.max(self.dropletmean+self.dropletstd)])
+        plt.ylim([np.min(self.dropletmean-self.dropletstd),np.max(self.dropletmean+self.dropletstd)])
         plt.xlim([0,np.max(self.x_radav)])
         plt.xlabel('Distance from maximum (pixels)')
         plt.ylabel('Intensity')
@@ -531,7 +537,7 @@ class GenerateDistributions():
         plt.figure()
         plt.plot(self.dropletmean)
         plt.fill_between(self.x_radav,self.dropletmean - self.dropletstd, self.dropletmean+self.dropletstd, alpha=0.2)
-        plt.ylim([0, 1.1])
+        plt.ylim([np.min(self.dropletmean-self.dropletstd),np.max(self.dropletmean+self.dropletstd)])
         plt.xlim([0,np.max(self.x_radav)])
         plt.xlabel('Distance from maximum (pixels)')
         plt.ylabel('Normalised Intensity')

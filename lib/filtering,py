@@ -1,0 +1,189 @@
+import mrcfile
+import numpy as np
+import math
+import sys, copy, os
+from numpy.ma.core import where
+from scipy.ndimage.measurements import label, maximum_position
+from skimage import feature, io, color
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import cv2
+from scipy import ndimage as ndi
+
+from skimage import morphology
+from skimage.feature import peak_local_max
+from skimage.segmentation import watershed
+import imutils
+
+def compute_edf(data):
+    z, y, x = np.indices(data.shape)
+
+    #find center of image
+    center = np.asarray(data.shape)
+    center = center/2 
+    center = center.astype(int)
+
+    edf = np.sqrt((x-center[2])**2 + (y-center[1])**2 + (z-center[0])**2) #Euclidean distance field
+
+    return edf, center
+
+def compute_edf2d(data):
+    y, x = np.indices(data.shape)
+
+    #find center of image
+    center = np.asarray(data.shape)
+    center = center/2 
+    center = center.astype(int)
+
+    edf = np.sqrt((x-center[1])**2 + (y-center[0])**2) #Euclidean distance field
+
+    return edf, center
+    
+
+def highpass_step(data, f, pltfts=False, pltmask=False):
+    data_freq = np.fft.fftn(data) #FT of 3D tomogram
+    data_fshift = np.fft.fftshift(data_freq)
+
+    edf, center = compute_edf(data_fshift)
+    cent_slice = center[0]
+
+    if(pltfts):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(20*np.log(np.abs(data_freq[cent_slice,:,:])),cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow(20*np.log(np.abs(data_fshift[cent_slice,:,:])),cmap='gray')
+
+        plt.title(f'FFT, central z-slice = {cent_slice}')
+        plt.show()
+
+    mask = edf > f #filter
+    #mask = mask.astype(int)
+    
+    data_fshift = data_fshift * mask
+    
+    if(pltmask):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(mask[cent_slice,:,:],cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow( (20*np.log10(0.01+np.abs(data_fshift[cent_slice,:,:]))),cmap='gray')
+        plt.show()
+
+    data_filt = np.real(np.fft.ifftn(np.fft.ifftshift(data_fshift)))
+    
+    return data_filt
+
+def highpass_gauss(data, f, pltfts=False, pltmask=False):
+    data_freq = np.fft.fftn(data) #FT of 3D tomogram
+    data_fshift = np.fft.fftshift(data_freq)
+
+    edf, center = compute_edf(data_fshift)
+    cent_slice = center[0]
+
+    if(pltfts):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(20*np.log(np.abs(data_freq[cent_slice,:,:])),cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow(20*np.log(np.abs(data_fshift[cent_slice,:,:])),cmap='gray')
+        plt.title(f'FFT, central z-slice = {cent_slice}')
+        plt.show()
+    
+    gauss = 1 - np.exp(-edf/f**2)
+    
+    data_fshift = data_fshift * gauss
+    
+    if(pltmask):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(gauss[cent_slice,:,:],cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow( (20*np.log10(0.01+np.abs(data_fshift[cent_slice,:,:]))),cmap='gray')
+        plt.show()
+
+    data_filt = np.real(np.fft.ifftn(np.fft.ifftshift(data_fshift)))
+    
+    return data_filt
+
+def highpass_butter(data, f, n, pltfts=False, pltmask=False):
+    """
+    data = data
+    f = frequency cut-off
+    n = steepness
+    """
+    data_freq = np.fft.fftn(data) #FT of 3D tomogram
+    data_fshift = np.fft.fftshift(data_freq)
+
+    edf, center = compute_edf(data_fshift)
+    cent_slice = center[0]
+
+    if(pltfts):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(20*np.log(np.abs(data_freq[cent_slice,:,:])),cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow(20*np.log(np.abs(data_fshift[cent_slice,:,:])),cmap='gray')
+        plt.title(f'FFT, central z-slice = {cent_slice}')
+        plt.show()
+
+    butter = 1 - (1/((1+(edf/f))**(2*n))) #filter
+    
+    data_fshift = data_fshift * butter
+    
+    if(pltmask):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(butter[cent_slice,:,:],cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow( (20*np.log10(0.01+np.abs(data_fshift[cent_slice,:,:]))),cmap='gray')
+        plt.show()
+
+    data_filt = np.real(np.fft.ifftn(np.fft.ifftshift(data_fshift)))
+    
+    return data_filt
+
+def lowpass_butter2d(data, f, n, pltfts=False, pltmask=False):
+    """
+    data = data
+    f = frequency cut-off
+    n = steepness
+    """
+    data_freq = np.fft.fftn(data) #FT of 3D tomogram
+    data_fshift = np.fft.fftshift(data_freq)
+
+    edf, center = compute_edf2d(data_fshift)
+    cent_slice = center[0]
+
+    if(pltfts):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(20*np.log(np.abs(data_freq[cent_slice,:,:])),cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow(20*np.log(np.abs(data_fshift[cent_slice,:,:])),cmap='gray')
+        plt.title(f'FFT, central z-slice = {cent_slice}')
+        plt.show()
+
+    butter = (1/((1+(edf/f))**(2*n))) #filter
+    
+    data_fshift = data_fshift * butter
+    
+    if(pltmask):
+        plt.figure()
+        plt.subplot(121)
+        plt.imshow(butter[cent_slice,:,:],cmap='gray')
+
+        plt.subplot(122)
+        plt.imshow( (20*np.log10(0.01+np.abs(data_fshift[cent_slice,:,:]))),cmap='gray')
+        plt.show()
+
+    data_filt = np.real(np.fft.ifftn(np.fft.ifftshift(data_fshift)))
+    
+    return data_filt
